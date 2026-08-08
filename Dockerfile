@@ -13,9 +13,12 @@ RUN npm ci
 #
 # NEXT_PUBLIC_* values are inlined into the client bundle at build
 # time, so they must be provided as build args (docker-compose.yml
-# forwards them from .env.local). Server-only secrets (service role
-# key, ENCRYPTION_KEY, META_APP_SECRET, ...) are read at runtime and
-# must NOT be baked into the image.
+# forwards them from .env.local; on Coolify, mark the matching env
+# vars "Available at Buildtime" in the app's Environment Variables
+# tab — Coolify then passes them as --build-arg automatically).
+# Server-only secrets (service role key, ENCRYPTION_KEY,
+# META_APP_SECRET, ...) are read at runtime and must NOT be baked
+# into the image — set those as normal (runtime-only) env vars.
 # ---------------------------------------------------------------
 FROM node:20-alpine AS builder
 WORKDIR /app
@@ -52,4 +55,11 @@ COPY --from=builder --chown=nextjs:nextjs /app/public ./public
 
 USER nextjs
 EXPOSE 3000
+
+# Container-level healthcheck (Coolify reads this for deploy status /
+# zero-downtime rollout gating when the app isn't run via
+# docker-compose.yml, which ships its own equivalent healthcheck).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD ["node", "-e", "fetch('http://localhost:3000').then((r)=>process.exit(r.ok||r.status<500?0:1)).catch(()=>process.exit(1))"]
+
 CMD ["node", "server.js"]

@@ -53,6 +53,38 @@ docker build \
 docker run -d --env-file .env.local -e PORT=3000 -p 3000:3000 wacrm
 ```
 
+## Deploying on Coolify
+
+1. Create a new **Application** → **Public/Private Repository** (or
+   connect the repo) and set **Build Pack** to **Dockerfile**. Coolify
+   will use the repo's `Dockerfile` directly and ignore
+   `docker-compose.yml`.
+2. **Port**: leave `3000` (matches `EXPOSE 3000` / `PORT=3000` baked
+   into the image). Coolify's proxy terminates TLS and forwards to
+   this port.
+3. **Environment Variables** tab — add every var from
+   `.env.local.example`, then:
+   - Toggle **"Available at Buildtime"** only for the four
+     `NEXT_PUBLIC_*` ones (`NEXT_PUBLIC_SUPABASE_URL`,
+     `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`,
+     `NEXT_PUBLIC_APP_LOCALE`) — Coolify passes those to `docker build`
+     as `--build-arg`, matching the `ARG`s already declared in the
+     Dockerfile.
+   - Leave everything else (`SUPABASE_SERVICE_ROLE_KEY`,
+     `ENCRYPTION_KEY`, `META_APP_SECRET`, …) as runtime-only — they
+     must never be marked buildtime, since that would bake secrets
+     into the image layers.
+4. Set `NEXT_PUBLIC_SITE_URL` to the domain you attach to the app in
+   Coolify (e.g. `https://crm.example.com`) — required for correct OG
+   images/sitemap, and needed for the WhatsApp webhook callback URL.
+5. Deploy. The `HEALTHCHECK` baked into the image drives Coolify's
+   deploy status / zero-downtime rollout gating.
+6. As with plain Docker, nothing inside the container is scheduled —
+   if you use automation Wait steps or flows, point Coolify's
+   built-in **Scheduled Task** (or any external cron) at
+   `GET /api/automations/cron` and `GET /api/flows/cron`, sending
+   `AUTOMATION_CRON_SECRET` in the `x-cron-secret` header.
+
 ## Notes
 
 - Database migrations under `supabase/` are **not** run by the
